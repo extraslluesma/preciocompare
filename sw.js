@@ -3,7 +3,7 @@
 // Estrategia: Cache First para assets estáticos, Network First para el resto
 // ============================================================
 
-const CACHE_NAME = 'preciocompare-v3';
+const CACHE_NAME = 'preciocompare-v4';
 
 // Assets a cachear en la instalación
 const ASSETS_TO_CACHE = [
