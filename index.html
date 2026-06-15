@@ -291,6 +291,49 @@
       box-shadow: 0 2px 8px rgba(22,163,74,.35);
     }
     .dark .cat-chip { background: var(--inp); }
+
+    /* ── Vista Categorías: filas ────────────────────────────── */
+    .cat-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 4px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      border-radius: 0;
+      background: transparent;
+      transition: background .12s;
+      /* Área táctil cómoda */
+      min-height: 54px;
+    }
+    .cat-row:last-child { border-bottom: none; }
+    .cat-row:active { background: var(--inp); }
+
+    .cat-row-emoji {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      background: var(--inp);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .cat-row-text {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.3;
+    }
+    .cat-row-meta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .cat-row-chevron {
+      color: var(--muted);
+      flex-shrink: 0;
+      opacity: .5;
+    }
   </style>
 </head>
 <body>
@@ -467,6 +510,25 @@
     <p class="text-center text-xs pb-2" style="color:var(--muted)">PrecioCompare v2.0 · Datos en tu dispositivo</p>
   </div>
 
+  <!-- ── VISTA: CATEGORÍAS ───────────────────────────────── -->
+  <div id="view-categories" class="view px-4 pt-5">
+    <!-- Título -->
+    <h2 class="text-2xl font-bold mb-4">Categorías</h2>
+    <!-- Búsqueda -->
+    <div class="relative mb-5">
+      <span class="absolute left-3 top-1/2 -translate-y-1/2" style="color:var(--muted)">🔍</span>
+      <input type="search" id="categories-search" placeholder="Buscar categorías…"
+        class="inp" style="padding-left:36px" oninput="renderCategories()" />
+    </div>
+    <!-- Lista -->
+    <div id="categories-list"></div>
+    <div id="categories-empty" class="hidden text-center py-12">
+      <div class="text-4xl mb-2">🗂️</div>
+      <p class="font-semibold">Sin resultados</p>
+      <p class="text-sm mt-1" style="color:var(--muted)">Prueba con otro término</p>
+    </div>
+  </div>
+
 </main>
 
 <!-- ── NAV INFERIOR ─────────────────────────────────────────── -->
@@ -474,6 +536,10 @@
   <button class="nav-btn active" id="nav-home" onclick="showView('home')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     Comparar
+  </button>
+  <button class="nav-btn" id="nav-categories" onclick="showView('categories')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Categ.
   </button>
   <button class="nav-btn" id="nav-catalog" onclick="showView('catalog')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -733,10 +799,96 @@ function showView(name) {
   if (nb) nb.classList.add('active');
   previousView = currentView;
   currentView  = name;
-  if (name === 'home')     renderHome();
-  if (name === 'catalog') { catalogActiveCat = null; renderCatalog(); }
-  if (name === 'cart')     renderCart();
-  if (name === 'settings') renderSettings();
+  if (name === 'home')       renderHome();
+  if (name === 'categories') renderCategories();
+  if (name === 'catalog')  { catalogActiveCat = null; renderCatalog(); }
+  if (name === 'cart')       renderCart();
+  if (name === 'settings')   renderSettings();
+}
+
+// ─────────────────────────────────────────────────────
+// VISTA CATEGORÍAS
+// ─────────────────────────────────────────────────────
+
+/**
+ * Extrae el emoji inicial de un nombre de categoría como "🧽 Limpieza y hogar".
+ * Usa el iterador Unicode para manejar correctamente emojis multi-codepoint.
+ * Devuelve { emoji, label }.
+ */
+function splitCatName(fullName) {
+  const it   = fullName[Symbol.iterator]();
+  const first = it.next().value || '';   // primer glyph (puede ser emoji multi-cp)
+  // Algunos emojis compuestos consumen 2 iteraciones (ZWJ sequences);
+  // capturamos hasta el primer espacio para ser seguros.
+  const spaceIdx = fullName.indexOf(' ');
+  if (spaceIdx === -1) return { emoji: first, label: fullName };
+  return {
+    emoji: fullName.slice(0, spaceIdx),
+    label: fullName.slice(spaceIdx + 1),
+  };
+}
+
+function renderCategories() {
+  const cats = DB.cats();
+  const q    = (document.getElementById('categories-search').value || '').toLowerCase();
+  const products = DB.products();
+
+  const filtered = cats.filter(c => c.name.toLowerCase().includes(q));
+
+  const list  = document.getElementById('categories-list');
+  const empty = document.getElementById('categories-empty');
+
+  if (!filtered.length) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  list.innerHTML = filtered.map((c, i) => {
+    const { emoji, label } = splitCatName(c.name);
+    // Contar productos de esta categoría
+    const prodCount = products.filter(p => p.categoryName === c.name).length;
+    const meta = prodCount
+      ? `${prodCount} producto${prodCount !== 1 ? 's' : ''}`
+      : `${c.subcategories.length} subcategoría${c.subcategories.length !== 1 ? 's' : ''}`;
+
+    return `<div class="cat-row fade-up" style="animation-delay:${i * 25}ms"
+        onclick="goToCategory('${c.name.replace(/'/g, "\\'")}')">
+      <div class="cat-row-emoji">${emoji}</div>
+      <div class="flex-1 min-w-0">
+        <div class="cat-row-text">${label}</div>
+        <div class="cat-row-meta">${meta}</div>
+      </div>
+      <svg class="cat-row-chevron" width="18" height="18" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </div>`;
+  }).join('');
+}
+
+/**
+ * Navega al Catálogo con la categoría dada preseleccionada.
+ * Aplica el filtro antes de renderizar para que el chip ya aparezca activo.
+ */
+function goToCategory(catName) {
+  catalogActiveCat = catName;
+
+  // Activar vista catálogo sin resetear el filtro (evitamos la rama de showView)
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-catalog').classList.add('active');
+  const nb = document.getElementById('nav-catalog');
+  if (nb) nb.classList.add('active');
+  previousView = currentView;
+  currentView  = 'catalog';
+
+  // Limpiar buscador del catálogo para ver todos los productos de la cat
+  const catSearch = document.getElementById('cat-search');
+  if (catSearch) catSearch.value = '';
+
+  renderCatalog();
 }
 
 function showDetail(pid) {
