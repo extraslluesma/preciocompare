@@ -1,0 +1,46 @@
+{
+  "name": "PrecioCompare — Frutas y Verduras",
+  "short_name": "PrecioCompare",
+  "description": "Compara precios de frutas y verduras entre tus tiendas habituales.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#16a34a",
+  "lang": "es",
+  "categories": ["lifestyle", "shopping", "utilities"],
+  "icons": [
+    {
+      "src": "https://api.iconify.design/twemoji/seedling.svg?width=192&height=192",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://api.iconify.design/twemoji/seedling.svg?width=512&height=512",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Añadir precio — Mercadona",
+      "short_name": "Mercadona",
+      "url": "./index.html?tienda=mercadona",
+      "description": "Añade un precio rápido desde Mercadona"
+    },
+    {
+      "name": "Añadir precio — Fruta Marisa",
+      "short_name": "Marisa",
+      "url": "./index.html?tienda=marisa",
+      "description": "Añade un precio rápido desde Fruta Marisa"
+    },
+    {
+      "name": "Añadir precio — Mercado Aranjuez",
+      "short_name": "Aranjuez",
+      "url": "./index.html?tienda=aranjuez",
+      "description": "Añade un precio rápido desde Mercado Aranjuez"
+    }
+  ]
+}
