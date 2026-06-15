@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#16a34a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PrecioCompare" />
+  <title>PrecioCompare</title>
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    // Configurar Tailwind con tema personalizado
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            }
+          },
+          fontFamily: {
+            sans: ['system-ui', '-apple-system', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* ── Variables de tema ───────────────────────────────────────── */
+    :root {
+      --bg-primary: #f8fafc;
+      --bg-secondary: #ffffff;
+      --bg-card: #ffffff;
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --border: #e2e8f0;
+      --input-bg: #f1f5f9;
+      --shadow: rgba(0,0,0,0.08);
+    }
+    .dark {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-card: #1e293b;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --border: #334155;
+      --input-bg: #0f172a;
+      --shadow: rgba(0,0,0,0.4);
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      transition: background-color 0.2s, color 0.2s;
+      font-family: system-ui, -apple-system, sans-serif;
+      overscroll-behavior: none;
+    }
+
+    /* ── Scrollbar discreta ───────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Tarjetas ─────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 2px 8px var(--shadow);
+    }
+
+    /* ── Inputs ───────────────────────────────────────────────────── */
+    .input-base {
+      background: var(--input-bg);
+      border: 1.5px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 16px; /* Evita zoom en iOS */
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input-base:focus { border-color: #16a34a; }
+    .input-base option { background: var(--bg-card); }
+
+    /* ── Botones ──────────────────────────────────────────────────── */
+    .btn-primary {
+      background: #16a34a;
+      color: white;
+      border-radius: 12px;
+      padding: 14px 20px;
+      font-size: 16px;
+      font-weight: 600;
+      width: 100%;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary:active { background: #15803d; transform: scale(0.98); }
+
+    .btn-secondary {
+      background: var(--input-bg);
+      color: var(--text-primary);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-secondary:active { transform: scale(0.97); }
+
+    /* ── Modal overlay ────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 50;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .modal-sheet {
+      background: var(--bg-card);
+      border-radius: 24px 24px 0 0;
+      padding: 24px 20px 40px;
+      width: 100%;
+      max-width: 480px;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .modal-overlay.open .modal-sheet {
+      transform: translateY(0);
+    }
+
+    /* ── Nav bottom ───────────────────────────────────────────────── */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      display: flex;
+      padding-bottom: env(safe-area-inset-bottom);
+      z-index: 40;
+    }
+    .nav-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 4px 10px;
+      gap: 4px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 500;
+      border: none;
+      background: none;
+      transition: color 0.15s;
+    }
+    .nav-btn.active { color: #16a34a; }
+    .nav-btn svg { width: 22px; height: 22px; }
+
+    /* ── Badge precio ─────────────────────────────────────────────── */
+    .price-badge {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 4px 9px;
+      border-radius: 8px;
+      line-height: 1.2;
+    }
+    .price-cheap  { background: #dcfce7; color: #166534; }
+    .price-dear   { background: #fee2e2; color: #991b1b; }
+    .price-normal { background: var(--input-bg); color: var(--text-secondary); }
+    .dark .price-cheap  { background: #14532d; color: #86efac; }
+    .dark .price-dear   { background: #450a0a; color: #fca5a5; }
+
+    /* ── Checkboxes personalizados ────────────────────────────────── */
+    .custom-cb { width: 22px; height: 22px; accent-color: #16a34a; cursor: pointer; flex-shrink: 0; }
+
+    /* ── Fade stale price ─────────────────────────────────────────── */
+    .price-stale { opacity: 0.45; }
+
+    /* ── Toggle switch ────────────────────────────────────────────── */
+    .toggle-track {
+      width: 44px; height: 24px;
+      background: var(--border);
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle-track.on { background: #16a34a; }
+    .toggle-thumb {
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 20px; height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    }
+    .toggle-track.on .toggle-thumb { transform: translateX(20px); }
+
+    /* ── Chip de etiqueta ─────────────────────────────────────────── */
+    .chip {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: var(--input-bg);
+      color: var(--text-secondary);
+    }
+
+    /* ── Animación entrada lista ──────────────────────────────────── */
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .product-row { animation: fadeSlideIn 0.2s ease both; }
+
+    /* ── Sección de vista ─────────────────────────────────────────── */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ── Separador de sección en Ajustes ──────────────────────────── */
+    .settings-section h3 {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ════════════════════════════════════════════════════════════
+     CONTENIDO PRINCIPAL (con padding para el nav inferior)
+════════════════════════════════════════════════════════════ -->
+<main class="pb-24 max-w-xl mx-auto">
+
+  <!-- ──────────────────────────────────────────────────────────
+       VISTA 1: COMPARADOR / INVENTARIO
+  ────────────────────────────────────────────────────────── -->
+  <div id="view-home" class="view active px-4 pt-5">
+
+    <!-- Cabecera -->
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h1 class="text-xl font-bold" style="color:var(--text-primary)">🌿 PrecioCompare</h1>
+        <p class="text-xs" style="color:var(--text-secondary)" id="home-subtitle">Cargando...</p>
+      </div>
+      <button onclick="toggleTheme()" class="p-2 rounded-xl" style="background:var(--input-bg)" title="Cambiar tema">
+        <span id="theme-icon" class="text-xl">🌙</span>
+      </button>
+    </div>
+
+    <!-- Buscador -->
+    <div class="relative mb-3">
+      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+      <input type="search" id="search-input" placeholder="Buscar producto..."
+        class="input-base pl-9"
+        oninput="renderProductList()" />
+    </div>
+
+    <!-- Controles lista de la compra -->
+    <div class="flex items-center justify-between mb-4 px-1">
+      <span class="text-sm font-medium" style="color:var(--text-secondary)">Lista de la compra</span>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <span class="text-xs" style="color:var(--text-secondary)" id="shopping-filter-label">Ver todas</span>
+        <div class="toggle-track" id="shopping-toggle" onclick="toggleShoppingFilter()">
+          <div class="toggle-thumb"></div>
+        </div>
+      </label>
+    </div>
+
+    <!-- Listado de productos -->
+    <div id="product-list" class="space-y-3"></div>
+
+    <!-- Estado vacío -->
+    <div id="empty-home" class="hidden text-center py-16">
+      <div class="text-5xl mb-3">🥦</div>
+      <p class="font-semibold text-lg" style="color:var(--text-primary)">Sin productos aún</p>
+      <p class="text-sm mt-1 mb-5" style="color:var(--text-secondary)">Añade frutas y verduras desde la pestaña "Productos"</p>
+    </div>
+
+    <!-- FAB para añadir precio rápido -->
+    <button onclick="openQuickPriceModal()" 
+      class="fixed bottom-20 right-4 w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-30"
+      style="background:#16a34a; color:white; box-shadow: 0 4px 16px rgba(22,163,74,0.45)">
+      +
+    </button>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────
+       VISTA 2: PRODUCTOS (gestión)
+  ────────────────────────────────────────────────────────── -->
+  <div id="view-products" class="view px-4 pt-5">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-xl font-bold" style="color:var(--text-primary)">Mis Productos</h2>
+      <button onclick="openAddProductModal()" class="btn-primary" style="width:auto; padding:10px 16px; font-size:14px">
+        + Nuevo
+      </button>
+    </div>
+
+    <div id="manage-product-list" class="space-y-2"></div>
+    <div id="empty-products" class="hidden text-center py-16">
+      <div class="text-5xl mb-3">🛒</div>
+      <p class="font-semibold" style="color:var(--text-primary)">No hay productos</p>
+      <p class="text-sm mt-1" style="color:var(--text-secondary)">Pulsa "+ Nuevo" para añadir el primero</p>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────
+       VISTA 3: DETALLE DE PRODUCTO
+  ────────────────────────────────────────────────────────── -->
+  <div id="view-detail" class="view px-4 pt-5">
+    <!-- Cabecera detalle -->
+    <div class="flex items-center gap-3 mb-5">
+      <button onclick="goBack()" class="p-2 rounded-xl" style="background:var(--input-bg)">←</button>
+      <div>
+        <h2 id="detail-name" class="text-xl font-bold" style="color:var(--text-primary)"></h2>
+        <span id="detail-tag" class="chip"></span>
+      </div>
+    </div>
+
+    <!-- Añadir precio -->
+    <button onclick="openAddPriceModal(currentDetailId)" class="btn-primary mb-5">
+      💰 Registrar nuevo precio
+    </button>
+
+    <!-- Resumen de precios actuales -->
+    <div class="card p-4 mb-4">
+      <h3 class="text-sm font-semibold mb-3" style="color:var(--text-secondary)">PRECIOS ACTUALES</h3>
+      <div id="detail-current-prices" class="space-y-2"></div>
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="card p-4 mb-4">
+      <h3 class="text-sm font-semibold mb-3" style="color:var(--text-secondary)">ESTADÍSTICAS</h3>
+      <div class="grid grid-cols-3 gap-3" id="detail-stats"></div>
+    </div>
+
+    <!-- Gráfico de tendencias -->
+    <div class="card p-4 mb-4">
+      <h3 class="text-sm font-semibold mb-3" style="color:var(--text-secondary)">EVOLUCIÓN DE PRECIOS</h3>
+      <div style="height:200px; position:relative">
+        <canvas id="price-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Historial completo -->
+    <div class="card p-4 mb-6">
+      <h3 class="text-sm font-semibold mb-3" style="color:var(--text-secondary)">HISTORIAL</h3>
+      <div id="detail-history" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────────────────────────────────
+       VISTA 4: AJUSTES
+  ────────────────────────────────────────────────────────── -->
+  <div id="view-settings" class="view px-4 pt-5 space-y-5">
+    <h2 class="text-xl font-bold" style="color:var(--text-primary)">Ajustes</h2>
+
+    <!-- Apariencia -->
+    <div class="settings-section card p-4">
+      <h3>Apariencia</h3>
+      <div class="flex items-center justify-between">
+        <span style="color:var(--text-primary)">Tema oscuro</span>
+        <div class="toggle-track" id="settings-theme-toggle" onclick="toggleTheme()">
+          <div class="toggle-thumb"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tiendas (informativo) -->
+    <div class="settings-section card p-4">
+      <h3>Tiendas configuradas</h3>
+      <div class="space-y-2">
+        <div class="flex items-center gap-2 text-sm" style="color:var(--text-primary)">
+          <span>🛒</span> Mercadona
+        </div>
+        <div class="flex items-center gap-2 text-sm" style="color:var(--text-primary)">
+          <span>🍓</span> Fruta Marisa
+        </div>
+        <div class="flex items-center gap-2 text-sm" style="color:var(--text-primary)">
+          <span>🏪</span> Mercado Aranjuez
+        </div>
+      </div>
+    </div>
+
+    <!-- Datos -->
+    <div class="settings-section card p-4 space-y-3">
+      <h3>Datos</h3>
+      <button onclick="exportData()" class="btn-secondary w-full">
+        📤 Exportar datos (.json)
+      </button>
+      <label class="btn-secondary w-full cursor-pointer flex items-center justify-center gap-2">
+        📥 Importar datos (.json)
+        <input type="file" accept=".json" class="hidden" onchange="importData(event)" />
+      </label>
+      <button onclick="confirmClearData()" class="w-full btn-secondary" style="color:#ef4444; border-color:#ef4444">
+        🗑️ Borrar todos los datos
+      </button>
+    </div>
+
+    <!-- Integración NFC -->
+    <div class="settings-section card p-4">
+      <h3>Integración NFC / Tasker</h3>
+      <p class="text-sm mb-3" style="color:var(--text-secondary)">Programa etiquetas NFC con estas URLs para abrir la app con la tienda preseleccionada:</p>
+      <div class="space-y-2">
+        <div class="text-xs font-mono p-2 rounded-lg" style="background:var(--input-bg); color:#16a34a; word-break:break-all" id="nfc-url-mercadona"></div>
+        <div class="text-xs font-mono p-2 rounded-lg" style="background:var(--input-bg); color:#16a34a; word-break:break-all" id="nfc-url-marisa"></div>
+        <div class="text-xs font-mono p-2 rounded-lg" style="background:var(--input-bg); color:#16a34a; word-break:break-all" id="nfc-url-aranjuez"></div>
+      </div>
+    </div>
+
+    <!-- Info versión -->
+    <p class="text-center text-xs pb-4" style="color:var(--text-secondary)">PrecioCompare v1.0 · Datos locales en tu dispositivo</p>
+  </div>
+
+</main>
+
+<!-- ── Nav inferior ──────────────────────────────────────────── -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-home" onclick="showView('home')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+    Comparar
+  </button>
+  <button class="nav-btn" id="nav-products" onclick="showView('products')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+      <line x1="8" y1="18" x2="21" y2="18"/>
+      <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/>
+      <line x1="3" y1="18" x2="3.01" y2="18"/>
+    </svg>
+    Productos
+  </button>
+  <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+    Ajustes
+  </button>
+</nav>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     MODALES
+════════════════════════════════════════════════════════════ -->
+
+<!-- Modal: Añadir precio -->
+<div class="modal-overlay" id="modal-add-price">
+  <div class="modal-sheet">
+    <div class="w-10 h-1 rounded-full mx-auto mb-5" style="background:var(--border)"></div>
+    <h3 class="text-lg font-bold mb-5" style="color:var(--text-primary)">Registrar precio</h3>
+
+    <!-- Selector de producto (solo en modal rápido) -->
+    <div id="modal-product-selector-wrap" class="mb-3 hidden">
+      <label class="text-sm font-medium mb-1 block" style="color:var(--text-secondary)">Producto</label>
+      <select id="modal-product-select" class="input-base"></select>
+    </div>
+
+    <div class="mb-3">
+      <label class="text-sm font-medium mb-1 block" style="color:var(--text-secondary)">Tienda</label>
+      <select id="modal-store" class="input-base">
+        <option value="mercadona">🛒 Mercadona</option>
+        <option value="marisa">🍓 Fruta Marisa</option>
+        <option value="aranjuez">🏪 Mercado Aranjuez</option>
+      </select>
+    </div>
+
+    <div class="mb-3">
+      <label class="text-sm font-medium mb-1 block" style="color:var(--text-secondary)">Precio (€)</label>
+      <input type="number" id="modal-price" placeholder="0.00" step="0.01" min="0" inputmode="decimal" class="input-base" />
+    </div>
+
+    <div class="mb-5">
+      <label class="text-sm font-medium mb-1 block" style="color:var(--text-secondary)">Unidad</label>
+      <div class="grid grid-cols-3 gap-2" id="unit-selector">
+        <button type="button" class="unit-btn" data-unit="€/kg">⚖️ €/Kg</button>
+        <button type="button" class="unit-btn" data-unit="€/ud">🔢 €/Ud</button>
+        <button type="button" class="unit-btn" data-unit="€/malla">🪢 €/Malla</button>
+      </div>
+    </div>
+
+    <button onclick="savePrice()" class="btn-primary mb-2">💾 Guardar precio</button>
+    <button onclick="closeModal('modal-add-price')" class="btn-secondary w-full text-center">Cancelar</button>
+  </div>
+</div>
+
+<!-- Modal: Añadir producto -->
+<div class="modal-overlay" id="modal-add-product">
+  <div class="modal-sheet">
+    <div class="w-10 h-1 rounded-full mx-auto mb-5" style="background:var(--border)"></div>
+    <h3 class="text-lg font-bold mb-5" style="color:var(--text-primary)" id="product-modal-title">Nuevo producto</h3>
+
+    <div class="mb-3">
+      <label class="text-sm font-medium mb-1 block" style="color:var(--text-secondary)">Nombre</label>
+      <input type="text" id="product-name-input" placeholder="Ej: Tomates cherry" class="input-base" />
+    </div>
+
+    <div class="mb-5">
+      <label class="text-sm font-medium mb-1 block" style="color:var(--text-secondary)">Categoría / Etiqueta</label>
+      <input type="text" id="product-tag-input" placeholder="Ej: Verdura, Fruta, Hoja verde..." class="input-base" />
+    </div>
+
+    <button onclick="saveProduct()" class="btn-primary mb-2">💾 Guardar producto</button>
+    <button onclick="closeModal('modal-add-product')" class="btn-secondary w-full text-center">Cancelar</button>
+
+    <input type="hidden" id="editing-product-id" value="" />
+  </div>
+</div>
+
+<!-- Toast de notificación -->
+<div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-sm font-semibold text-white shadow-lg"
+     style="background:#16a34a; transition: opacity 0.3s, transform 0.3s; opacity:0; pointer-events:none; transform: translateY(-8px) translateX(-50%)">
+  ✓ Guardado
+</div>
+
+<style>
+  /* Botones de unidad */
+  .unit-btn {
+    padding: 10px 4px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1.5px solid var(--border);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .unit-btn.selected {
+    border-color: #16a34a;
+    background: #dcfce7;
+    color: #166534;
+  }
+  .dark .unit-btn.selected {
+    background: #14532d;
+    color: #86efac;
+  }
+</style>
+
+
+<!-- ════════════════════════════════════════════════════════════
+     JAVASCRIPT PRINCIPAL
+════════════════════════════════════════════════════════════ -->
+<script>
+// ─────────────────────────────────────────────────────────────
+// CONSTANTES Y CONFIGURACIÓN
+// ─────────────────────────────────────────────────────────────
+const STORES = {
+  mercadona: { name: 'Mercadona', emoji: '🛒' },
+  marisa:    { name: 'Fruta Marisa', emoji: '🍓' },
+  aranjuez:  { name: 'Mercado Aranjuez', emoji: '🏪' },
+};
+const STORE_IDS = Object.keys(STORES);
+const STALE_DAYS = 15;       // días sin actualizar = precio "antiguo"
+const STORE_COLORS = {       // colores para Chart.js
+  mercadona: '#3b82f6',
+  marisa:    '#f97316',
+  aranjuez:  '#a855f7',
+};
+
+// ─────────────────────────────────────────────────────────────
+// ESTADO GLOBAL
+// ─────────────────────────────────────────────────────────────
+let shoppingFilterOn = false;
+let currentDetailId  = null;
+let selectedUnit     = '€/kg';
+let priceChart       = null;
+let currentView      = 'home';
+
+// ─────────────────────────────────────────────────────────────
+// PERSISTENCIA: localStorage helpers
+// ─────────────────────────────────────────────────────────────
+const DB = {
+  /** Devuelve array de productos */
+  getProducts() {
+    return JSON.parse(localStorage.getItem('pc_products') || '[]');
+  },
+  /** Devuelve array de registros de precios */
+  getPrices() {
+    return JSON.parse(localStorage.getItem('pc_prices') || '[]');
+  },
+  /** Guarda array de productos */
+  saveProducts(arr) {
+    localStorage.setItem('pc_products', JSON.stringify(arr));
+  },
+  /** Guarda array de registros */
+  savePrices(arr) {
+    localStorage.setItem('pc_prices', JSON.stringify(arr));
+  },
+  /** ID único simple */
+  newId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
+// TEMA (claro / oscuro)
+// ─────────────────────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('pc_theme');
+  const dark  = saved ? saved === 'dark' : true; // oscuro por defecto
+  applyTheme(dark);
+}
+
+function applyTheme(dark) {
+  document.documentElement.classList.toggle('dark', dark);
+  localStorage.setItem('pc_theme', dark ? 'dark' : 'light');
+  document.getElementById('theme-icon').textContent = dark ? '☀️' : '🌙';
+  const toggle = document.getElementById('settings-theme-toggle');
+  if (toggle) toggle.classList.toggle('on', dark);
+}
+
+function toggleTheme() {
+  const isDark = document.documentElement.classList.contains('dark');
+  applyTheme(!isDark);
+}
+
+// ─────────────────────────────────────────────────────────────
+// NAVEGACIÓN ENTRE VISTAS
+// ─────────────────────────────────────────────────────────────
+function showView(name) {
+  // Ocultar todas las vistas
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+  document.getElementById(`view-${name}`).classList.add('active');
+  if (document.getElementById(`nav-${name}`)) {
+    document.getElementById(`nav-${name}`).classList.add('active');
+  }
+  currentView = name;
+
+  // Renderizar la vista correspondiente
+  if (name === 'home')     renderProductList();
+  if (name === 'products') renderManageList();
+  if (name === 'settings') renderSettings();
+}
+
+function showDetail(productId) {
+  currentDetailId = productId;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-detail').classList.add('active');
+  renderDetail(productId);
+}
+
+function goBack() {
+  showView('home');
+}
+
+// ─────────────────────────────────────────────────────────────
+// VISTA HOME: listado comparador
+// ─────────────────────────────────────────────────────────────
+function renderProductList() {
+  const products = DB.getProducts();
+  const prices   = DB.getPrices();
+  const query    = (document.getElementById('search-input').value || '').toLowerCase();
+
+  let filtered = products.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(query) ||
+                        (p.tag || '').toLowerCase().includes(query);
+    const matchShop   = !shoppingFilterOn || p.inCart;
+    return matchSearch && matchShop;
+  });
+
+  // Actualizar subtítulo
+  document.getElementById('home-subtitle').textContent =
+    `${products.length} producto${products.length !== 1 ? 's' : ''} · ${prices.length} precio${prices.length !== 1 ? 's' : ''} registrado${prices.length !== 1 ? 's' : ''}`;
+
+  const list  = document.getElementById('product-list');
+  const empty = document.getElementById('empty-home');
+
+  if (filtered.length === 0) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  // Pre-computar último precio por producto/tienda
+  list.innerHTML = filtered.map((p, i) => buildProductCard(p, prices, i)).join('');
+}
+
+function buildProductCard(product, allPrices, animIdx) {
+  const productPrices = allPrices.filter(r => r.productId === product.id);
+
+  // Último precio por tienda (solo comparamos misma unidad si hay más de una)
+  const lastByStore = {};
+  STORE_IDS.forEach(sid => {
+    const entries = productPrices
+      .filter(r => r.store === sid)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (entries.length) lastByStore[sid] = entries[0];
+  });
+
+  // Detectar la unidad predominante para comparar fairamente
+  const unitCounts = {};
+  Object.values(lastByStore).forEach(e => {
+    unitCounts[e.unit] = (unitCounts[e.unit] || 0) + 1;
+  });
+  const dominantUnit = Object.keys(unitCounts).sort((a,b) => unitCounts[b]-unitCounts[a])[0];
+
+  // Precios comparables (misma unidad)
+  const comparablePrices = Object.values(lastByStore)
+    .filter(e => e.unit === dominantUnit)
+    .map(e => e.price);
+
+  const minPrice = comparablePrices.length ? Math.min(...comparablePrices) : null;
+  const maxPrice = comparablePrices.length > 1 ? Math.max(...comparablePrices) : null;
+
+  const now = new Date();
+
+  const storeBadges = STORE_IDS.map(sid => {
+    const entry = lastByStore[sid];
+    if (!entry) {
+      return `<div class="text-center">
+        <div class="text-xs mb-1" style="color:var(--text-secondary)">${STORES[sid].emoji}</div>
+        <span class="price-badge price-normal">—</span>
+      </div>`;
+    }
+
+    // Calcular antigüedad
+    const daysDiff = Math.floor((now - new Date(entry.date)) / 86400000);
+    const stale    = daysDiff > STALE_DAYS;
+
+    // Clase de color
+    let priceClass = 'price-normal';
+    if (entry.unit === dominantUnit) {
+      if (entry.price === minPrice && comparablePrices.length > 1) priceClass = 'price-cheap';
+      else if (entry.price === maxPrice && comparablePrices.length > 1) priceClass = 'price-dear';
+    }
+
+    const staleAttr  = stale ? 'price-stale' : '';
+    const staleIcon  = stale ? ' ⚠️' : '';
+    const priceStr   = `${entry.price.toFixed(2)}€`;
+    const unitShort  = entry.unit.replace('€/', '');
+
+    return `<div class="text-center">
+      <div class="text-xs mb-1" style="color:var(--text-secondary)">${STORES[sid].emoji}</div>
+      <div class="${staleAttr}">
+        <span class="price-badge ${priceClass}">${priceStr}<span class="font-normal text-xs opacity-70">/${unitShort}</span></span>
+        ${staleIcon ? `<div class="text-xs mt-0.5">${staleIcon}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const cartChecked = product.inCart ? 'checked' : '';
+
+  return `
+    <div class="card p-4 product-row" style="animation-delay:${animIdx * 40}ms">
+      <div class="flex items-start gap-3">
+        <input type="checkbox" class="custom-cb mt-0.5" ${cartChecked}
+          onchange="toggleCart('${product.id}', this.checked)" />
+        <div class="flex-1 min-w-0" onclick="showDetail('${product.id}')" style="cursor:pointer">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-semibold truncate" style="color:var(--text-primary)">${product.name}</span>
+            ${product.tag ? `<span class="chip">${product.tag}</span>` : ''}
+          </div>
+          <div class="grid grid-cols-3 gap-2 mt-2">
+            ${storeBadges}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// LISTA DE LA COMPRA
+// ─────────────────────────────────────────────────────────────
+function toggleCart(productId, checked) {
+  const products = DB.getProducts();
+  const idx = products.findIndex(p => p.id === productId);
+  if (idx !== -1) {
+    products[idx].inCart = checked;
+    DB.saveProducts(products);
+  }
+}
+
+function toggleShoppingFilter() {
+  shoppingFilterOn = !shoppingFilterOn;
+  const toggle = document.getElementById('shopping-toggle');
+  const label  = document.getElementById('shopping-filter-label');
+  toggle.classList.toggle('on', shoppingFilterOn);
+  label.textContent = shoppingFilterOn ? 'Solo lista' : 'Ver todas';
+  renderProductList();
+}
+
+// ─────────────────────────────────────────────────────────────
+// VISTA PRODUCTOS: gestión
+// ─────────────────────────────────────────────────────────────
+function renderManageList() {
+  const products = DB.getProducts();
+  const prices   = DB.getPrices();
+  const list     = document.getElementById('manage-product-list');
+  const empty    = document.getElementById('empty-products');
+
+  if (!products.length) {
+    list.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  list.innerHTML = products.map(p => {
+    const count = prices.filter(r => r.productId === p.id).length;
+    return `
+    <div class="card p-4 flex items-center gap-3">
+      <div class="flex-1 min-w-0" onclick="showDetail('${p.id}')" style="cursor:pointer">
+        <span class="font-semibold" style="color:var(--text-primary)">${p.name}</span>
+        <div class="flex items-center gap-2 mt-1">
+          ${p.tag ? `<span class="chip">${p.tag}</span>` : ''}
+          <span class="text-xs" style="color:var(--text-secondary)">${count} precio${count !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="openEditProductModal('${p.id}')"
+          class="p-2 rounded-xl text-sm" style="background:var(--input-bg)">✏️</button>
+        <button onclick="deleteProduct('${p.id}')"
+          class="p-2 rounded-xl text-sm" style="background:var(--input-bg)">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────
+// VISTA DETALLE
+// ─────────────────────────────────────────────────────────────
+function renderDetail(productId) {
+  const product  = DB.getProducts().find(p => p.id === productId);
+  if (!product) { goBack(); return; }
+
+  const allPrices     = DB.getPrices().filter(r => r.productId === productId);
+  const sortedPrices  = [...allPrices].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // Cabecera
+  document.getElementById('detail-name').textContent = product.name;
+  document.getElementById('detail-tag').textContent  = product.tag || '';
+
+  // Precios actuales por tienda
+  const now = new Date();
+  const currentPricesEl = document.getElementById('detail-current-prices');
+  currentPricesEl.innerHTML = STORE_IDS.map(sid => {
+    const entries = sortedPrices.filter(r => r.store === sid);
+    if (!entries.length) return `
+      <div class="flex items-center justify-between">
+        <span style="color:var(--text-secondary)">${STORES[sid].emoji} ${STORES[sid].name}</span>
+        <span class="price-badge price-normal">Sin datos</span>
+      </div>`;
+    const e = entries[0];
+    const days = Math.floor((now - new Date(e.date)) / 86400000);
+    const stale = days > STALE_DAYS;
+    return `
+      <div class="flex items-center justify-between">
+        <div>
+          <span style="color:var(--text-primary)">${STORES[sid].emoji} ${STORES[sid].name}</span>
+          <span class="text-xs ml-2 ${stale ? 'text-orange-400' : ''}" style="${stale ? '' : 'color:var(--text-secondary)'}">
+            ${days === 0 ? 'hoy' : `hace ${days}d`}${stale ? ' ⚠️' : ''}
+          </span>
+        </div>
+        <span class="price-badge price-normal">${e.price.toFixed(2)}€ <span class="font-normal text-xs opacity-70">${e.unit}</span></span>
+      </div>`;
+  }).join('');
+
+  // Estadísticas
+  const allAmounts = allPrices.map(r => r.price);
+  const avg   = allAmounts.length ? (allAmounts.reduce((a,b)=>a+b,0)/allAmounts.length).toFixed(2) : '—';
+  const minP  = allAmounts.length ? Math.min(...allAmounts).toFixed(2) : '—';
+  const maxP  = allAmounts.length ? Math.max(...allAmounts).toFixed(2) : '—';
+
+  document.getElementById('detail-stats').innerHTML = `
+    <div class="text-center p-2 rounded-xl" style="background:var(--input-bg)">
+      <div class="text-lg font-bold" style="color:var(--text-primary)">${avg}€</div>
+      <div class="text-xs" style="color:var(--text-secondary)">Precio medio</div>
+    </div>
+    <div class="text-center p-2 rounded-xl" style="background:#dcfce7">
+      <div class="text-lg font-bold text-green-700">${minP}€</div>
+      <div class="text-xs text-green-600">Mínimo</div>
+    </div>
+    <div class="text-center p-2 rounded-xl" style="background:#fee2e2">
+      <div class="text-lg font-bold text-red-700">${maxP}€</div>
+      <div class="text-xs text-red-500">Máximo</div>
+    </div>`;
+
+  // Gráfico
+  renderChart(productId, allPrices);
+
+  // Historial
+  document.getElementById('detail-history').innerHTML = sortedPrices.length
+    ? sortedPrices.map(r => `
+      <div class="flex items-center justify-between py-2 border-b" style="border-color:var(--border)">
+        <div>
+          <span class="font-medium text-sm" style="color:var(--text-primary)">${STORES[r.store].emoji} ${STORES[r.store].name}</span>
+          <div class="text-xs" style="color:var(--text-secondary)">${formatDate(r.date)}</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="price-badge price-normal">${r.price.toFixed(2)}€ <span class="font-normal text-xs opacity-70">${r.unit}</span></span>
+          <button onclick="deletePrice('${r.id}')" class="text-xs p-1 rounded-lg" style="color:var(--text-secondary); background:var(--input-bg)">✕</button>
+        </div>
+      </div>`).join('')
+    : '<p class="text-sm text-center py-4" style="color:var(--text-secondary)">Sin registros aún</p>';
+}
+
+function renderChart(productId, allPrices) {
+  // Destruir gráfico anterior si existe
+  if (priceChart) { priceChart.destroy(); priceChart = null; }
+  if (!allPrices.length) return;
+
+  const ctx = document.getElementById('price-chart').getContext('2d');
+
+  // Dataset por tienda
+  const datasets = STORE_IDS.map(sid => {
+    const entries = allPrices
+      .filter(r => r.store === sid)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    return {
+      label: STORES[sid].name,
+      data: entries.map(r => ({ x: r.date, y: r.price })),
+      borderColor: STORE_COLORS[sid],
+      backgroundColor: STORE_COLORS[sid] + '22',
+      borderWidth: 2,
+      tension: 0.3,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+    };
+  }).filter(ds => ds.data.length > 0);
+
+  const isDark = document.documentElement.classList.contains('dark');
+  const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+  const textColor = isDark ? '#94a3b8' : '#64748b';
+
+  priceChart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          type: 'category',
+          ticks: { color: textColor, maxTicksLimit: 6, font: { size: 10 } },
+          grid: { color: gridColor },
+        },
+        y: {
+          ticks: {
+            color: textColor,
+            callback: v => `${v}€`,
+            font: { size: 10 },
+          },
+          grid: { color: gridColor },
+        }
+      },
+      plugins: {
+        legend: { labels: { color: textColor, usePointStyle: true, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}€`,
+          }
+        }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODALES
+// ─────────────────────────────────────────────────────────────
+
+/** Abre el modal de precio para un producto concreto (desde detalle) */
+function openAddPriceModal(productId, preselectedStore = null) {
+  currentDetailId = productId;
+  document.getElementById('modal-product-selector-wrap').classList.add('hidden');
+  const storeSelect = document.getElementById('modal-store');
+  if (preselectedStore && STORES[preselectedStore]) {
+    storeSelect.value = preselectedStore;
+  }
+  document.getElementById('modal-price').value = '';
+  selectUnit('€/kg');
+  openModal('modal-add-price');
+}
+
+/** Abre el modal de precio rápido (FAB) con selector de producto */
+function openQuickPriceModal(preselectedStore = null) {
+  const products = DB.getProducts();
+  if (!products.length) {
+    showToast('⚠️ Añade productos primero', '#f59e0b');
+    return;
+  }
+  const wrap   = document.getElementById('modal-product-selector-wrap');
+  const select = document.getElementById('modal-product-select');
+  wrap.classList.remove('hidden');
+  select.innerHTML = products.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  currentDetailId = null; // se resolverá al guardar
+
+  if (preselectedStore && STORES[preselectedStore]) {
+    document.getElementById('modal-store').value = preselectedStore;
+  }
+  document.getElementById('modal-price').value = '';
+  selectUnit('€/kg');
+  openModal('modal-add-price');
+}
+
+function openAddProductModal() {
+  document.getElementById('product-modal-title').textContent = 'Nuevo producto';
+  document.getElementById('product-name-input').value = '';
+  document.getElementById('product-tag-input').value  = '';
+  document.getElementById('editing-product-id').value = '';
+  openModal('modal-add-product');
+}
+
+function openEditProductModal(productId) {
+  const product = DB.getProducts().find(p => p.id === productId);
+  if (!product) return;
+  document.getElementById('product-modal-title').textContent = 'Editar producto';
+  document.getElementById('product-name-input').value = product.name;
+  document.getElementById('product-tag-input').value  = product.tag || '';
+  document.getElementById('editing-product-id').value = productId;
+  openModal('modal-add-product');
+}
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// Cerrar modal al tocar el overlay
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal(overlay.id);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// SELECTOR DE UNIDAD (botones)
+// ─────────────────────────────────────────────────────────────
+function selectUnit(unit) {
+  selectedUnit = unit;
+  document.querySelectorAll('.unit-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.unit === unit);
+  });
+}
+
+document.querySelectorAll('.unit-btn').forEach(btn => {
+  btn.addEventListener('click', () => selectUnit(btn.dataset.unit));
+});
+
+// ─────────────────────────────────────────────────────────────
+// GUARDAR PRECIO
+// ─────────────────────────────────────────────────────────────
+function savePrice() {
+  const priceVal = parseFloat(document.getElementById('modal-price').value);
+  const storeVal = document.getElementById('modal-store').value;
+
+  if (!storeVal || isNaN(priceVal) || priceVal <= 0) {
+    showToast('⚠️ Completa todos los campos', '#f59e0b');
+    return;
+  }
+
+  // Resolver producto
+  let productId = currentDetailId;
+  const selectorWrap = document.getElementById('modal-product-selector-wrap');
+  if (!selectorWrap.classList.contains('hidden')) {
+    productId = document.getElementById('modal-product-select').value;
+  }
+  if (!productId) {
+    showToast('⚠️ Selecciona un producto', '#f59e0b');
+    return;
+  }
+
+  const prices = DB.getPrices();
+  prices.push({
+    id:        DB.newId(),
+    productId,
+    store:     storeVal,
+    price:     priceVal,
+    unit:      selectedUnit,
+    date:      new Date().toISOString().split('T')[0],
+  });
+  DB.savePrices(prices);
+
+  closeModal('modal-add-price');
+  showToast('✓ Precio guardado');
+
+  // Refrescar vista activa
+  if (currentView === 'home')        renderProductList();
+  if (document.getElementById('view-detail').classList.contains('active')) {
+    renderDetail(productId);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// GUARDAR PRODUCTO
+// ─────────────────────────────────────────────────────────────
+function saveProduct() {
+  const name = document.getElementById('product-name-input').value.trim();
+  const tag  = document.getElementById('product-tag-input').value.trim();
+  const editId = document.getElementById('editing-product-id').value;
+
+  if (!name) {
+    showToast('⚠️ El nombre es obligatorio', '#f59e0b');
+    return;
+  }
+
+  const products = DB.getProducts();
+
+  if (editId) {
+    const idx = products.findIndex(p => p.id === editId);
+    if (idx !== -1) { products[idx].name = name; products[idx].tag = tag; }
+  } else {
+    products.push({ id: DB.newId(), name, tag, inCart: false });
+  }
+
+  DB.saveProducts(products);
+  closeModal('modal-add-product');
+  showToast(editId ? '✓ Producto actualizado' : '✓ Producto añadido');
+  renderManageList();
+  renderProductList();
+}
+
+// ─────────────────────────────────────────────────────────────
+// BORRAR
+// ─────────────────────────────────────────────────────────────
+function deleteProduct(productId) {
+  if (!confirm('¿Eliminar este producto y todos sus precios?')) return;
+  DB.saveProducts(DB.getProducts().filter(p => p.id !== productId));
+  DB.savePrices(DB.getPrices().filter(r => r.productId !== productId));
+  renderManageList();
+  renderProductList();
+  showToast('🗑️ Producto eliminado', '#ef4444');
+}
+
+function deletePrice(priceId) {
+  DB.savePrices(DB.getPrices().filter(r => r.id !== priceId));
+  renderDetail(currentDetailId);
+  showToast('🗑️ Registro eliminado', '#ef4444');
+}
+
+// ─────────────────────────────────────────────────────────────
+// AJUSTES: exportar / importar / borrar
+// ─────────────────────────────────────────────────────────────
+function exportData() {
+  const data = {
+    version:    1,
+    exportedAt: new Date().toISOString(),
+    products:   DB.getProducts(),
+    prices:     DB.getPrices(),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `preciocompare-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📤 Exportado correctamente');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.products || !data.prices) throw new Error('Formato incorrecto');
+      if (!confirm(`¿Importar ${data.products.length} productos y ${data.prices.length} precios? Se sobrescribirán los datos actuales.`)) return;
+      DB.saveProducts(data.products);
+      DB.savePrices(data.prices);
+      showToast('📥 Datos importados');
+      renderProductList();
+    } catch {
+      showToast('⚠️ Archivo inválido', '#ef4444');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = ''; // reset input
+}
+
+function confirmClearData() {
+  if (!confirm('¿Borrar TODOS los datos? Esta acción no se puede deshacer.')) return;
+  localStorage.removeItem('pc_products');
+  localStorage.removeItem('pc_prices');
+  renderProductList();
+  renderManageList();
+  showToast('🗑️ Datos eliminados', '#ef4444');
+}
+
+// ─────────────────────────────────────────────────────────────
+// AJUSTES: URLs NFC
+// ─────────────────────────────────────────────────────────────
+function renderSettings() {
+  const base = window.location.href.split('?')[0];
+  document.getElementById('nfc-url-mercadona').textContent = `${base}?tienda=mercadona`;
+  document.getElementById('nfc-url-marisa').textContent    = `${base}?tienda=marisa`;
+  document.getElementById('nfc-url-aranjuez').textContent  = `${base}?tienda=aranjuez`;
+
+  // Sincronizar toggle de tema
+  const isDark = document.documentElement.classList.contains('dark');
+  document.getElementById('settings-theme-toggle').classList.toggle('on', isDark);
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOAST NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, color = '#16a34a') {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.style.background = color;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateY(0) translateX(-50%)';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-8px) translateX(-50%)';
+  }, 2200);
+}
+
+// ─────────────────────────────────────────────────────────────
+// UTILIDADES
+// ─────────────────────────────────────────────────────────────
+function formatDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// LECTURA DE PARÁMETROS URL (NFC / Tasker)
+// ─────────────────────────────────────────────────────────────
+function checkUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const tienda = params.get('tienda');
+  if (tienda && STORES[tienda]) {
+    // Abrir modal de precio rápido con tienda preseleccionada
+    setTimeout(() => {
+      openQuickPriceModal(tienda);
+    }, 300); // pequeño delay para que la app esté lista
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// REGISTRO DEL SERVICE WORKER
+// ─────────────────────────────────────────────────────────────
+function registerSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(() => {
+      console.log('[App] Service Worker registrado correctamente');
+    }).catch(err => {
+      console.warn('[App] Error al registrar SW:', err);
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// INICIALIZACIÓN
+// ─────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  registerSW();
+  renderProductList();
+  checkUrlParams();
+
+  // Seleccionar primera unidad por defecto
+  selectUnit('€/kg');
+});
+</script>
+
+</body>
+</html>
