@@ -510,6 +510,34 @@
       </div>
     </div>
 
+    <!-- Importador Mercadona -->
+    <div class="card overflow-hidden" id="importer-card">
+      <div class="accordion-header" onclick="toggleAcc(this)">
+        <span class="font-semibold text-sm">🛒 Importar catálogo Mercadona</span>
+        <span class="acc-arrow">▾</span>
+      </div>
+      <div class="accordion-body">
+        <p class="text-xs mb-3" style="color:var(--muted)">
+          Pega el texto copiado de la web de Mercadona. La app detectará el nombre, precio y unidad de cada producto y los clasificará automáticamente.
+        </p>
+        <textarea
+          id="import-text"
+          rows="10"
+          class="inp mb-3"
+          style="resize:vertical;min-height:160px;font-size:13px;font-family:monospace;line-height:1.5"
+          placeholder="12 Mini croissants de mantequilla&#10;2,15 €&#10;0,24 kg&#10;8,96 €/kg&#10;Añadir a la lista&#10;&#10;1/4 Sandía baja en semillas&#10;2,39 €&#10;1,77 kg&#10;1,35 €/kg&#10;Añadir a la lista"
+        ></textarea>
+        <div id="import-preview" class="mb-3 hidden">
+          <p class="text-xs font-semibold mb-1" style="color:var(--muted)">Vista previa (primeros 5 productos):</p>
+          <div id="import-preview-list" class="space-y-1"></div>
+        </div>
+        <button onclick="processMercadonaImport()" class="btn-g">
+          <span>⚡</span> Procesar y Cargar Catálogo Mercadona
+        </button>
+        <p class="text-xs mt-2 text-center" style="color:var(--muted)" id="import-status"></p>
+      </div>
+    </div>
+
     <!-- NFC -->
     <div class="card overflow-hidden">
       <div class="accordion-header" onclick="toggleAcc(this)">
@@ -1683,6 +1711,233 @@ function registerSW() {
       .then(()=>console.log('[SW] registrado'))
       .catch(err=>console.warn('[SW] error',err));
   }
+}
+
+// ─────────────────────────────────────────────────────
+// IMPORTADOR / PARSER DE CATÁLOGO MERCADONA
+// ─────────────────────────────────────────────────────
+
+/**
+ * Diccionario de clasificación automática.
+ * Clave: texto a buscar (minúsculas). Valor: nombre de categoría (debe existir en DB).
+ */
+const MERCADONA_KEYWORD_MAP = [
+  { keys: ['pollo','cerdo','ternera','vacuno','hamburguesa','lomo','panceta'],  cat: '🥩 Carne' },
+  { keys: ['merluza','salmón','salmon','gamba','atún','atun','pulpo','calamar','sepia'], cat: '🐟 Marisco y pescado' },
+  { keys: ['manzana','plátano','platano','tomate','patata','cebolla','lechuga','sandía','sandia','melón','melon','naranja','pera','uva','limón','limon','zanahoria','pimiento','pepino','berenjena','calabacín','calabacin','kiwi','mandarina','aguacate','espinaca','brócoli','brocoli','coliflor'], cat: '🍎 Fruta y verdura' },
+  { keys: ['leche','mantequilla','huevo','queso','mozzarella','margarina'],     cat: '🥚 Huevos, leche y mantequilla' },
+  { keys: ['agua','refresco','cola','tónica','tonica','isotónico','isotonico'], cat: '💧 Agua y refrescos' },
+  { keys: ['zumo'],                                                              cat: '🧃 Zumos' },
+  { keys: ['vino','cerveza','licor','ron','ginebra','cava','sidra','lambrusco'], cat: '🍷 Bodega' },
+  { keys: ['pan ','magdalena','croissant','bizcocho','tarta','bollería','bolleria','hojaldre','rosquilla','muffin'], cat: '🥐 Panadería y pastelería' },
+  { keys: ['gel ','champú','champu','desodorante','crema ','colonia','maquillaje','aftersun','protector solar'], cat: '🧴 Cuidado facial y corporal' },
+  { keys: ['lejía','lejia','friegasuelos','lavavajillas','estropajo','basura','papel higiénico','papel higienico','detergente','suavizante','limpiacristales'], cat: '🧽 Limpieza y hogar' },
+  { keys: ['yogur','bífidus','bifidus','natillas','flan','postre','gelatina'], cat: '🍮 Postres y yogures' },
+  { keys: ['macarrón','macarron','arroz','lenteja','garbanzo','fideo','pasta','espagueti','espaguetti'], cat: '🍚 Arroz, legumbres y pasta' },
+  { keys: ['jamón','jamon','chorizo','pavo','salchichón','salchichon','mortadela','salchicha','bacón','bacon','pechuga','embutido'], cat: '🧀 Charcutería y quesos' },
+  { keys: ['perro','gato'],                                                      cat: '🐾 Mascotas' },
+  { keys: ['pizza','plato preparado','lasaña','lasana','canelón','canelon'],     cat: '🍕 Pizzas y platos preparados' },
+  { keys: ['aceite','vinagre','sal ','pimienta','orégano','oregano','pimentón','pimenton','comino','curry','ajo en','cebolla en polvo'], cat: '🫙 Aceite, especias y salsas' },
+  { keys: ['aceituna','encurtido','fruto seco','almendra','nuez','pistacho','anacardo','patatas fritas','snack','chips'], cat: '🫒 Aperitivos' },
+  { keys: ['azúcar','azucar','caramelo','chocolate','mermelada','miel','galleta','cereales','cacao'], cat: '🍬 Azúcar, caramelos y chocolate' },
+  { keys: ['atún en','atun en','berberecho','mejillón','mejillon','sardina','conserva','gazpacho','caldo','sopa'], cat: '🥫 Conservas, caldos y cremas' },
+];
+
+const UNCATEGORIZED_CAT_NAME = '🛒 Sin clasificar';
+
+/**
+ * Clasifica un nombre de producto según el diccionario.
+ * Devuelve el nombre de categoría correspondiente.
+ */
+function classifyProduct(name) {
+  const lc = name.toLowerCase();
+  for (const rule of MERCADONA_KEYWORD_MAP) {
+    if (rule.keys.some(k => lc.includes(k))) return rule.cat;
+  }
+  return UNCATEGORIZED_CAT_NAME;
+}
+
+/**
+ * Busca o crea la categoría en DB y devuelve { catId, subcat }.
+ * Si la categoría no existe, la crea con una subcategoría por defecto.
+ */
+function findOrCreateCategory(catName) {
+  let cats = DB.cats();
+  let cat  = cats.find(c => c.name === catName);
+  if (!cat) {
+    cat = { id: DB.id(), name: catName, subcategories: ['General'] };
+    cats.push(cat);
+    DB.saveCats(cats);
+  }
+  const subcat = cat.subcategories[0] || 'General';
+  return { catId: cat.id, subcat };
+}
+
+/**
+ * Busca o crea la tienda "Mercadona" y devuelve su ID.
+ */
+function findOrCreateMercadona() {
+  let stores = DB.stores();
+  let store  = stores.find(s => s.name.toLowerCase() === 'mercadona');
+  if (!store) {
+    store = { id: DB.id(), emoji: '🛒', name: 'Mercadona' };
+    stores.push(store);
+    DB.saveStores(stores);
+  }
+  return store.id;
+}
+
+/**
+ * Parser principal: lee el textarea, extrae bloques válidos y devuelve
+ * un array de objetos { name, price, unit }.
+ */
+function parseMercadonaText(rawText) {
+  const NOISE = ['añadir a la lista', 'oferta', 'nuevo', 'precio especial', 'sin gluten', 'ecológico'];
+  const lines  = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  const results = [];
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // ¿Es una línea de precio total? → Ej: "2,15 €"
+    const priceMatch = line.match(/^(\d+[,.]?\d*)\s*€\s*$/);
+    if (priceMatch && i > 0) {
+      // La línea anterior debería ser el nombre del producto
+      const nameLine = lines[i - 1];
+      // Ignorar líneas de ruido
+      if (NOISE.some(n => nameLine.toLowerCase().includes(n))) { i++; continue; }
+      // Ignorar si la línea anterior era también un precio o unidad
+      if (/^\d+[,.]\d+\s*€/.test(nameLine) || /€\//.test(nameLine)) { i++; continue; }
+
+      const rawName = nameLine;
+      // Limpiar: eliminar números enteros iniciales PERO mantener fracciones (1/4, 2/3…)
+      const name = rawName.replace(/^\d+\s+(?!\d*\/)/, '').trim();
+
+      const price = parseFloat(priceMatch[1].replace(',', '.'));
+
+      // Buscar la unidad en las líneas siguientes (hasta 3 líneas más)
+      let unit = '€/ud';
+      for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+        if (lines[j].includes('€/kg')) { unit = '€/kg'; break; }
+        if (lines[j].includes('€/L') || lines[j].includes('€/l') || lines[j].includes('€/lt')) { unit = '€/L'; break; }
+        if (lines[j].includes('€/ud') || lines[j].includes('€/u.')) { unit = '€/ud'; break; }
+      }
+
+      if (name && price > 0) {
+        results.push({ name, price, unit });
+      }
+    }
+    i++;
+  }
+
+  return results;
+}
+
+/**
+ * Función principal conectada al botón. Procesa, clasifica e inyecta.
+ */
+function processMercadonaImport() {
+  const raw = document.getElementById('import-text').value;
+  if (!raw.trim()) {
+    showToast('⚠️ Pega texto primero', '#f59e0b');
+    return;
+  }
+
+  const statusEl = document.getElementById('import-status');
+  statusEl.textContent = '⏳ Procesando…';
+
+  // Dar tiempo al DOM para actualizar
+  setTimeout(() => {
+    try {
+      const parsed = parseMercadonaText(raw);
+
+      if (!parsed.length) {
+        statusEl.textContent = '';
+        showToast('⚠️ No se encontraron productos válidos', '#f59e0b');
+        return;
+      }
+
+      // Mostrar preview (primeros 5)
+      const previewEl   = document.getElementById('import-preview');
+      const previewList = document.getElementById('import-preview-list');
+      previewList.innerHTML = parsed.slice(0, 5).map(p => `
+        <div style="background:var(--inp);border-radius:8px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:8px;">
+          <span style="flex:1;color:var(--text)">${p.name}</span>
+          <span style="color:#16a34a;font-weight:700;white-space:nowrap">${p.price.toFixed(2)} €</span>
+          <span class="chip">${p.unit}</span>
+        </div>
+      `).join('');
+      if (parsed.length > 5) {
+        previewList.innerHTML += `<p style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0">…y ${parsed.length - 5} más</p>`;
+      }
+      previewEl.classList.remove('hidden');
+
+      // Obtener o crear Mercadona
+      const storeId  = findOrCreateMercadona();
+      const today    = new Date().toISOString().slice(0, 10);
+
+      const products = DB.products();
+      const prices   = DB.prices();
+
+      let inserted = 0;
+      let skipped  = 0;
+
+      for (const item of parsed) {
+        // Evitar duplicados exactos por nombre (misma tienda)
+        const existing = products.find(p => p.name.toLowerCase() === item.name.toLowerCase());
+        let productId;
+
+        if (existing) {
+          productId = existing.id;
+          skipped++;
+        } else {
+          // Clasificar
+          const catName        = classifyProduct(item.name);
+          const { catId, subcat } = findOrCreateCategory(catName);
+
+          // Crear producto
+          const newProduct = {
+            id:             DB.id(),
+            name:           item.name,
+            categoryName:   catName,
+            subcategory:    subcat,
+            defaultStoreId: null,
+          };
+          products.push(newProduct);
+          productId = newProduct.id;
+          inserted++;
+        }
+
+        // Crear registro de precio (siempre actualiza con el precio nuevo)
+        prices.push({
+          id:        DB.id(),
+          productId,
+          storeId,
+          price:     item.price,
+          unit:      item.unit,
+          date:      today,
+        });
+      }
+
+      DB.saveProducts(products);
+      DB.savePrices(prices);
+
+      statusEl.textContent = `✅ ${inserted} nuevos · ${skipped} ya existían · ${parsed.length} precios registrados`;
+
+      renderHome();
+      renderCatalog();
+      if (currentView === 'settings') renderSettings();
+
+      alert(`✅ Importación completada\n\n📦 Productos nuevos: ${inserted}\n🔄 Ya existían (precio actualizado): ${skipped}\n💰 Registros de precio creados: ${parsed.length}\n\n¡Catálogo Mercadona cargado con éxito!`);
+      showToast(`✅ ${inserted} productos importados`);
+
+    } catch (err) {
+      console.error('[Importador Mercadona]', err);
+      statusEl.textContent = '';
+      showToast('❌ Error procesando el texto', '#ef4444');
+    }
+  }, 50);
 }
 
 // ─────────────────────────────────────────────────────
